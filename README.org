@@ -1,0 +1,65 @@
+#+TITLE: ganeti-utils
+#+AUTHOR: Stephen Fromm
+
+* ganeti-utils
+
+This repo comprises a set of utilties to facilitate monitoring of a
+ganeti cluster.  There are two portions:
+
+1. *gnt-cluster-verify.sh* A shell script that runs ~gnt-cluster verify~
+   via cron and stores the result.
+2. *gnt-snmpd-check.py* A python script that connects to /snmpd/ so that
+   one can remotely monitor the cluster health.
+
+This is split into two separate jobs because running ~gnt-cluster
+verify~ on demand can take awhile to complete and may cause issues if
+there are multiple calls to run the verify job.
+
+** gnt-cluster-verify.sh
+
+This utility is meant to run regularly from /cron/ on every node in the
+cluster.  This can be every 5 or 10 minutes.  Something like this should
+suffice:
+
+#+BEGIN_EXAMPLE
+$ cat /etc/cron.d/gnt-cluster-verify.cron 
+01,11,21,31,41,51 * * * * root /usr/local/bin/gnt-cluster-verify.sh
+#+END_EXAMPLE
+
+If this runs on a non-master node, it will store *0* in the state file
+and exit immediately.  If it finds that *ganeti-masterd* is not running
+and this *is* the master node, it will attempt to restart the ganeti
+service.  It will then run ~gnt-cluster verify --error-codes~.  If the
+RC is non-zero, this utility will store a non-zero code in the state
+file.  If RC does equal 0, *gnt-cluster-verify.sh* will then process the
+output from ~gnt-cluster verify~ for *ERROR* messages; *WARNING*
+messages are ignored.  If there are /node/ or /instance/ errors, this
+will store a non-zero value in the state file.  Lastly, this script will
+archive the ~gnt-cluster verify~ job if it completed successfully and
+log to syslog the archival.
+
+If there is an error in the ~gnt-cluster verify~ report, this will send
+an email to the configured recipient with the report output.  Reports
+are cached in /tmp.
+
+** gnt-snmpd-check.py
+
+This utility is meant to provide integration with /snmpd/ for remote
+monitoring.  The following line in /snmpd.conf/ should suffice:
+
+#+BEGIN_EXAMPLE
+extend gntcluster /usr/local/bin/gnt-snmpd-check.py
+#+END_EXAMPLE
+
+You can then query for it via SNMP:
+
+#+BEGIN_EXAMPLE
+$ snmpget -v2c -cpublic localhost .1.3.6.1.4.1.8072.1.3.2.3.1.1.10.103.110.116.99.108.117.115.116.101.114
+NET-SNMP-EXTEND-MIB::nsExtendOutput1Line."gntcluster" = STRING: 0
+#+END_EXAMPLE
+
+Similar to *gnt-cluster-verify.sh*, this will check if it is running on
+the master node.  If not, it will always return *0*.  If it is the
+master node, it will return the value in the state file.  If the state
+file has not been recently modified, this will return a non-zero
+condition to /snmpd/.
