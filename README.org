@@ -4,7 +4,7 @@
 * ganeti-utils
 
 This repo comprises a set of utilties to facilitate monitoring of a
-ganeti cluster.  There are two portions:
+[[http://www.ganeti.org/][Ganeti]] cluster.  There are two portions:
 
 1. *gnt-cluster-verify.sh* A shell script that runs ~gnt-cluster verify~
    via cron and stores the result.
